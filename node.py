@@ -94,8 +94,11 @@ async def connect_socket_proxy(proxy, token, reconnect_interval=RETRY_INTERVAL, 
     browser_id = str(uuid.uuid3(uuid.NAMESPACE_DNS, proxy))
     logger.info(f"Browser ID: {browser_id}")
 
+    # Prepend the scheme to the proxy string
+    proxy_url = f"http://{proxy}"
+
     try:
-        proxy_instance = Proxy.from_url(proxy)
+        proxy_instance = Proxy.from_url(proxy_url)
         async with proxy_connect(WEBSOCKET_URL, proxy=proxy_instance) as websocket:
             logger.info("Connected to WebSocket")
 
@@ -152,6 +155,7 @@ async def connect_socket_proxy(proxy, token, reconnect_interval=RETRY_INTERVAL, 
         else:
             logger.error(f"Connection error: {e}")
             return proxy
+
 
 async def shutdown(loop, signal=None):
     if signal:
