@@ -50,9 +50,31 @@ def remove_proxy_from_list(proxy):
 
 def is_valid_proxy(proxy):
     try:
-        result = urlparse(proxy)
-        return all([result.scheme, result.netloc])
-    except ValueError:
+        # Split the proxy string into its components
+        parts = proxy.split(':')
+        
+        # Check if there are exactly 4 parts: ip, port, username, password
+        if len(parts) != 4:
+            return False
+        
+        ip, port, username, password = parts
+
+        # Validate IP address format
+        ip_parts = ip.split('.')
+        if len(ip_parts) != 4 or not all(0 <= int(part) < 256 for part in ip_parts):
+            return False
+
+        # Validate port is a number between 1 and 65535
+        if not port.isdigit() or not (1 <= int(port) <= 65535):
+            return False
+
+        # Validate username and password are not empty
+        if not username or not password:
+            return False
+
+        return True
+
+    except (ValueError, TypeError):
         return False
 
 async def call_api_info_async(token):
