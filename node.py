@@ -206,33 +206,18 @@ async def shutdown(loop, signal=None):
     logger.info("All tasks cancelled, stopping loop")
     loop.stop()
 
-def get_latest_version_info():
-    url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+def download_latest_version():
+    url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/{NODEPY_FILENAME}"
     response = requests.get(url)
     response.raise_for_status()
-    return response.json()
-
-def download_latest_version(download_url, filename):
-    response = requests.get(download_url)
-    response.raise_for_status()
-    with open(filename, 'wb') as f:
+    with open(os.path.join(script_dir, NODEPY_FILENAME), 'wb') as f:
         f.write(response.content)
 
 def check_for_update():
     try:
-        latest_release = get_latest_version_info()
-        latest_version = latest_release["tag_name"]
-        if latest_version != CURRENT_VERSION:
-            logger.info(f"New version available: {latest_version}")
-            asset = next((a for a in latest_release["assets"] if a["name"] == NODEPY_FILENAME), None)
-            if asset:
-                download_url = asset["browser_download_url"]
-                download_latest_version(download_url, os.path.join(script_dir, NODEPY_FILENAME))
-                logger.info(f"Downloaded new version: {latest_version}")
-                return True
-        else:
-            logger.info("No new version available.")
-            return False
+        download_latest_version()
+        logger.info("Downloaded latest version of node.py")
+        return True
     except Exception as e:
         logger.error(f"Error checking for update: {e}")
         return False
@@ -248,7 +233,7 @@ async def main():
         restart_script()
 
     retry_times = {}
-    active_proxies = [(proxy, user_agents[idx]) for idx, proxy in enumerate(all_proxies[:2]) if is_valid_proxy(proxy)]
+    active_proxies = [(proxy, user_agents[idx]) for idx, proxy in enumerate(all_proxies[:50]) if is_valid_proxy(proxy)]
     
     while True:
         if not active_proxies:
