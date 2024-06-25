@@ -42,7 +42,7 @@ NODEPY_FILENAME = "node.py"
 
 # Create SSL context allowing all TLS versions up to TLS 1.3
 ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS)
-ssl_context.minimum_version = ssl.TLSVersion.TLSv1_3
+ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
 ssl_context.maximum_version = ssl.TLSVersion.TLSv1_3
 ssl_context.check_hostname = False
 ssl_context.verify_mode = ssl.CERT_NONE
