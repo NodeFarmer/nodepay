@@ -32,8 +32,8 @@ with open(useragents_path, 'r') as f:
     user_agents = f.read().splitlines()
 
 WEBSOCKET_URL = "wss://nw.nodepay.ai:4576/websocket"
-RETRY_INTERVAL = 60000  # in milliseconds
-PING_INTERVAL = 10000  # in milliseconds, increased to reduce bandwidth usage
+RETRY_INTERVAL = 60  # in seconds, retry interval for failed proxies
+PING_INTERVAL = 10  # in seconds, increased to reduce bandwidth usage
 EXTENSION_VERSION = "2.1.9"
 
 # Create SSL context allowing all TLS versions up to TLS 1.3
@@ -44,7 +44,7 @@ ssl_context.check_hostname = False
 ssl_context.verify_mode = ssl.CERT_NONE
 
 GITHUB_REPO = "NodeFarmer/nodepay"
-CURRENT_VERSION = "1.0.0"
+CURRENT_VERSION = "1.0.1"
 NODEPY_FILENAME = "node.py"
 
 def call_api_info(token):
@@ -155,7 +155,7 @@ async def connect_socket_proxy(proxy, user_agent, token, reconnect_interval=RETR
 
                 if data["action"] == "PONG":
                     await send_pong(data["id"])
-                    await asyncio.sleep(ping_interval / 1000)  # Wait before sending ping
+                    await asyncio.sleep(ping_interval)  # Wait before sending ping
                     await send_ping(data["id"])
 
                 elif data["action"] == "AUTH":
@@ -188,6 +188,7 @@ async def connect_socket_proxy(proxy, user_agent, token, reconnect_interval=RETR
         ]):
             return None
         else:
+            await asyncio.sleep(reconnect_interval)
             return proxy
 
 async def shutdown(loop, signal=None):
@@ -247,21 +248,25 @@ async def main():
         restart_script()
 
     retry_times = {}
-    active_proxies = [(proxy, user_agents[idx]) for idx, proxy in enumerate(all_proxies[:50]) if is_valid_proxy(proxy)]
-    tasks = {asyncio.create_task(connect_socket_proxy(proxy, user_agent, NP_TOKEN)): proxy for proxy, user_agent in active_proxies}
-
+    active_proxies = [(proxy, user_agents[idx]) for idx, proxy in enumerate(all_proxies[:2]) if is_valid_proxy(proxy)]
+    
     while True:
+        if not active_proxies:
+            logger.error("No valid proxies available.")
+            await asyncio.sleep(RETRY_INTERVAL)
+            active_proxies = [(proxy, user_agents[idx]) for idx, proxy in enumerate(all_proxies[:50]) if is_valid_proxy(proxy)]
+            continue
+        
+        tasks = {asyncio.create_task(connect_socket_proxy(proxy, user_agent, NP_TOKEN)): proxy for proxy, user_agent in active_proxies}
+
         done, pending = await asyncio.wait(tasks.keys(), return_when=asyncio.FIRST_COMPLETED)
         for task in done:
             failed_proxy = tasks[task]
             if task.result() is None:
                 logger.info(f"Removing and replacing failed proxy: {failed_proxy}")
-                retry_times[failed_proxy] = time.time() + (RETRY_INTERVAL / 1000)
+                retry_times[failed_proxy] = time.time() + RETRY_INTERVAL
                 active_proxies = [(proxy, ua) for proxy, ua in active_proxies if proxy != failed_proxy]
-                tasks.pop(task)
-                remove_proxy_from_list(failed_proxy)
-            else:
-                tasks.pop(task)
+            tasks.pop(task)
 
         current_time = time.time()
         for proxy, user_agent in set(active_proxies) - set(tasks.values()):
@@ -272,7 +277,7 @@ async def main():
                 logger.info(f"Retrying proxy: {proxy} at {current_time}, scheduled retry at {retry_times[proxy]}")
                 new_task = asyncio.create_task(connect_socket_proxy(proxy, user_agent, NP_TOKEN))
                 tasks[new_task] = proxy
-                retry_times[proxy] = current_time + (RETRY_INTERVAL / 1000)
+                retry_times[proxy] = current_time + RETRY_INTERVAL
 
         await asyncio.sleep(3)  # Prevent tight loop in case of rapid failures
 
