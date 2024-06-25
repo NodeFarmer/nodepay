@@ -8,17 +8,44 @@ import websockets
 from loguru import logger
 from websockets_proxy import Proxy, proxy_connect
 from urllib.parse import urlparse
+import os
+import ssl
+import subprocess
+import sys
+
+# Determine the directory where the script is located
+script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # Read NP_TOKEN from the configuration file
-with open('config.txt', 'r') as f:
+config_path = os.path.join(script_dir, 'config.txt')
+with open(config_path, 'r') as f:
     NP_TOKEN = f.read().strip()
 
-with open('proxy.txt', 'r') as f:
+# Read proxies from the proxy file
+proxy_path = os.path.join(script_dir, 'proxy.txt')
+with open(proxy_path, 'r') as f:
     all_proxies = f.read().splitlines()
+
+# Read user agents from the user agent file
+useragents_path = os.path.join(script_dir, 'useragents.txt')
+with open(useragents_path, 'r') as f:
+    user_agents = f.read().splitlines()
 
 WEBSOCKET_URL = "wss://nw.nodepay.ai:4576/websocket"
 RETRY_INTERVAL = 60000  # in milliseconds
 PING_INTERVAL = 10000  # in milliseconds, increased to reduce bandwidth usage
+EXTENSION_VERSION = "2.1.9"
+
+# Create SSL context allowing all TLS versions up to TLS 1.3
+ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS)
+ssl_context.minimum_version = ssl.TLSVersion.TLSv1
+ssl_context.maximum_version = ssl.TLSVersion.TLSv1_3
+ssl_context.check_hostname = False
+ssl_context.verify_mode = ssl.CERT_NONE
+
+GITHUB_REPO = "NodeFarmer/nodepay"
+CURRENT_VERSION = "1.0.0"
+NODEPY_FILENAME = "node.py"
 
 def call_api_info(token):
     headers = {
@@ -40,7 +67,7 @@ user_data = call_api_info(NP_TOKEN)
 USER_ID = user_data['data']['uid']
 
 def remove_proxy_from_list(proxy):
-    with open("proxy.txt", "r+") as file:
+    with open(proxy_path, "r+") as file:
         lines = file.readlines()
         file.seek(0)
         for line in lines:
@@ -85,7 +112,7 @@ async def call_api_info_async(token):
         }
     }
 
-async def connect_socket_proxy(proxy, token, reconnect_interval=RETRY_INTERVAL, ping_interval=PING_INTERVAL):
+async def connect_socket_proxy(proxy, user_agent, token, reconnect_interval=RETRY_INTERVAL, ping_interval=PING_INTERVAL):
     if not is_valid_proxy(proxy):
         logger.error(f"Invalid proxy URL: {proxy}")
         remove_proxy_from_list(proxy)
@@ -94,12 +121,16 @@ async def connect_socket_proxy(proxy, token, reconnect_interval=RETRY_INTERVAL, 
     browser_id = str(uuid.uuid3(uuid.NAMESPACE_DNS, proxy))
     logger.info(f"Browser ID: {browser_id}")
 
-    # Prepend the scheme to the proxy string
-    proxy_url = f"http://{proxy}"
+    ip, port, username, password = proxy.split(':')
+    proxy_url = f"http://{username}:{password}@{ip}:{port}"
 
     try:
         proxy_instance = Proxy.from_url(proxy_url)
-        async with proxy_connect(WEBSOCKET_URL, proxy=proxy_instance) as websocket:
+        
+        # Log request details
+        logger.info(f"Connecting to WebSocket with proxy: {proxy_url}")
+        
+        async with proxy_connect(WEBSOCKET_URL, ssl=ssl_context, proxy=proxy_instance) as websocket:
             logger.info("Connected to WebSocket")
 
             async def send_ping(guid, options={}):
@@ -115,9 +146,11 @@ async def connect_socket_proxy(proxy, token, reconnect_interval=RETRY_INTERVAL, 
                     "id": guid,
                     "origin_action": "PONG",
                 }
+                logger.info(payload)
                 await websocket.send(json.dumps(payload))
 
             async for message in websocket:
+                logger.info(message)
                 data = json.loads(message)
 
                 if data["action"] == "PONG":
@@ -132,10 +165,10 @@ async def connect_socket_proxy(proxy, token, reconnect_interval=RETRY_INTERVAL, 
                         auth_info = {
                             "user_id": user_info["uid"],
                             "browser_id": browser_id,
-                            "user_agent": "Mozilla/5.0",
+                            "user_agent": user_agent,
                             "timestamp": int(time.time()),
                             "device_type": "extension",
-                            "version": "extension_version",
+                            "version": EXTENSION_VERSION,
                             "token": token,
                             "origin_action": "AUTH",
                         }
@@ -144,18 +177,18 @@ async def connect_socket_proxy(proxy, token, reconnect_interval=RETRY_INTERVAL, 
                         logger.error("Failed to authenticate")
 
     except Exception as e:
-        error_message = str(e)
-        if any(phrase in error_message for phrase in [
+        # Log the detailed exception information
+        logger.error(f"Connection error: {str(e)}")
+        if hasattr(e, 'response') and e.response:
+            logger.error(f"Response status: {e.response.status}")
+            logger.error(f"Response body: {e.response.text}")
+        if any(phrase in str(e) for phrase in [
             "sent 1011 (internal error) keepalive ping timeout; no close frame received",
-            "500 Internal Server Error"
+            "500 Internal Server Error",
         ]):
-            logger.info(f"Removing error proxy from the list: {proxy}")
-            remove_proxy_from_list(proxy)
             return None
         else:
-            logger.error(f"Connection error: {e}")
             return proxy
-
 
 async def shutdown(loop, signal=None):
     if signal:
@@ -172,9 +205,50 @@ async def shutdown(loop, signal=None):
     logger.info("All tasks cancelled, stopping loop")
     loop.stop()
 
+def get_latest_version_info():
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+    response = requests.get(url)
+    response.raise_for_status()
+    return response.json()
+
+def download_latest_version(download_url, filename):
+    response = requests.get(download_url)
+    response.raise_for_status()
+    with open(filename, 'wb') as f:
+        f.write(response.content)
+
+def check_for_update():
+    try:
+        latest_release = get_latest_version_info()
+        latest_version = latest_release["tag_name"]
+        if latest_version != CURRENT_VERSION:
+            logger.info(f"New version available: {latest_version}")
+            asset = next((a for a in latest_release["assets"] if a["name"] == NODEPY_FILENAME), None)
+            if asset:
+                download_url = asset["browser_download_url"]
+                download_latest_version(download_url, os.path.join(script_dir, NODEPY_FILENAME))
+                logger.info(f"Downloaded new version: {latest_version}")
+                return True
+        else:
+            logger.info("No new version available.")
+            return False
+    except Exception as e:
+        logger.error(f"Error checking for update: {e}")
+        return False
+
+def restart_script():
+    python = sys.executable
+    os.execl(python, python, *sys.argv)
+
 async def main():
-    active_proxies = [proxy for proxy in all_proxies[:50] if is_valid_proxy(proxy)]
-    tasks = {asyncio.create_task(connect_socket_proxy(proxy, NP_TOKEN)): proxy for proxy in active_proxies}
+    # Check for updates before starting
+    if check_for_update():
+        logger.info("Restarting script to apply new version...")
+        restart_script()
+
+    retry_times = {}
+    active_proxies = [(proxy, user_agents[idx]) for idx, proxy in enumerate(all_proxies[:50]) if is_valid_proxy(proxy)]
+    tasks = {asyncio.create_task(connect_socket_proxy(proxy, user_agent, NP_TOKEN)): proxy for proxy, user_agent in active_proxies}
 
     while True:
         done, pending = await asyncio.wait(tasks.keys(), return_when=asyncio.FIRST_COMPLETED)
@@ -182,23 +256,32 @@ async def main():
             failed_proxy = tasks[task]
             if task.result() is None:
                 logger.info(f"Removing and replacing failed proxy: {failed_proxy}")
-                active_proxies.remove(failed_proxy)
-                if all_proxies:
-                    new_proxy = all_proxies.pop(0)
-                    if is_valid_proxy(new_proxy):
-                        active_proxies.append(new_proxy)
-                        new_task = asyncio.create_task(connect_socket_proxy(new_proxy, NP_TOKEN))
-                        tasks[new_task] = new_proxy
-            tasks.pop(task)
+                retry_times[failed_proxy] = time.time() + (RETRY_INTERVAL / 1000)
+                active_proxies = [(proxy, ua) for proxy, ua in active_proxies if proxy != failed_proxy]
+                tasks.pop(task)
+                remove_proxy_from_list(failed_proxy)
+            else:
+                tasks.pop(task)
 
-        for proxy in set(active_proxies) - set(tasks.values()):
-            new_task = asyncio.create_task(connect_socket_proxy(proxy, NP_TOKEN))
-            tasks[new_task] = proxy
+        current_time = time.time()
+        for proxy, user_agent in set(active_proxies) - set(tasks.values()):
+            if proxy not in retry_times:
+                retry_times[proxy] = 0
+
+            if current_time >= retry_times[proxy]:
+                logger.info(f"Retrying proxy: {proxy} at {current_time}, scheduled retry at {retry_times[proxy]}")
+                new_task = asyncio.create_task(connect_socket_proxy(proxy, user_agent, NP_TOKEN))
+                tasks[new_task] = proxy
+                retry_times[proxy] = current_time + (RETRY_INTERVAL / 1000)
 
         await asyncio.sleep(3)  # Prevent tight loop in case of rapid failures
 
 if __name__ == '__main__':
+    loop = asyncio.get_event_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(shutdown(loop, signal=s)))
     try:
-        asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit):
-        logger.info("Program terminated by user.")
+        loop.run_until_complete(main())
+    finally:
+        loop.close()
+        logger.info("Program terminated.")
