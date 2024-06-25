@@ -16,56 +16,56 @@ import sys
 # Determine the directory where the script is located
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
-# Read NP_TOKEN from the configuration file
-config_path = os.path.join(script_dir, 'config.txt')
-with open(config_path, 'r') as f:
-    NP_TOKEN = f.read().strip()
+# Function to read a single-line token from a file
+def read_single_line_file(file_path):
+    with open(file_path, 'r') as f:
+        return f.read().strip()
 
-# Read proxies from the proxy file
-proxy_path = os.path.join(script_dir, 'proxy.txt')
-with open(proxy_path, 'r') as f:
-    all_proxies = f.read().splitlines()
+# Function to read multiple lines from a file
+def read_lines_file(file_path):
+    with open(file_path, 'r') as f:
+        return f.read().splitlines()
 
-# Read user agents from the user agent file
-useragents_path = os.path.join(script_dir, 'useragents.txt')
-with open(useragents_path, 'r') as f:
-    user_agents = f.read().splitlines()
+# Read configuration values from files
+NP_TOKEN = read_single_line_file(os.path.join(script_dir, 'config.txt'))
+all_proxies = read_lines_file(os.path.join(script_dir, 'proxy.txt'))
+user_agents = read_lines_file(os.path.join(script_dir, 'useragents.txt'))
 
+# Constants
 WEBSOCKET_URL = "wss://nw.nodepay.ai:4576/websocket"
-RETRY_INTERVAL = 60  # in seconds, retry interval for failed proxies
-PING_INTERVAL = 10  # in seconds, increased to reduce bandwidth usage
+RETRY_INTERVAL = 60  # Retry interval for failed proxies in seconds
+PING_INTERVAL = 10  # Increased to reduce bandwidth usage
 EXTENSION_VERSION = "2.1.9"
-
-# Create SSL context allowing all TLS versions up to TLS 1.3
-ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS)
-ssl_context.minimum_version = ssl.TLSVersion.TLSv1
-ssl_context.maximum_version = ssl.TLSVersion.TLSv1_3
-ssl_context.check_hostname = False
-ssl_context.verify_mode = ssl.CERT_NONE
-
 GITHUB_REPO = "NodeFarmer/nodepay"
 CURRENT_VERSION = "1.0.1"
 NODEPY_FILENAME = "node.py"
 
+# Create SSL context allowing all TLS versions up to TLS 1.3
+ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS)
+ssl_context.minimum_version = ssl.TLSVersion.TLSv1_3
+ssl_context.maximum_version = ssl.TLSVersion.TLSv1_3
+ssl_context.check_hostname = False
+ssl_context.verify_mode = ssl.CERT_NONE
+
+# Function to call the API and get user information
 def call_api_info(token):
-    headers = {
-        'Content-Type': 'application/json'
-    }
+    headers = {'Content-Type': 'application/json'}
     if token:
         headers['Authorization'] = f'Bearer {token}'
-
+    
     response = requests.post(
         "https://api.nodepay.ai/api/auth/session",
         headers=headers,
         json={}
     )
-    response.raise_for_status()  # Raise an exception for HTTP errors
+    response.raise_for_status()
     return response.json()
 
 # Fetch USER_ID from the API
 user_data = call_api_info(NP_TOKEN)
 USER_ID = user_data['data']['uid']
 
+# Function to remove a proxy from the list
 def remove_proxy_from_list(proxy):
     with open(proxy_path, "r+") as file:
         lines = file.readlines()
@@ -75,35 +75,25 @@ def remove_proxy_from_list(proxy):
                 file.write(line)
         file.truncate()
 
+# Function to validate a proxy
 def is_valid_proxy(proxy):
     try:
-        # Split the proxy string into its components
         parts = proxy.split(':')
-        
-        # Check if there are exactly 4 parts: ip, port, username, password
         if len(parts) != 4:
             return False
-        
         ip, port, username, password = parts
-
-        # Validate IP address format
         ip_parts = ip.split('.')
         if len(ip_parts) != 4 or not all(0 <= int(part) < 256 for part in ip_parts):
             return False
-
-        # Validate port is a number between 1 and 65535
         if not port.isdigit() or not (1 <= int(port) <= 65535):
             return False
-
-        # Validate username and password are not empty
         if not username or not password:
             return False
-
         return True
-
     except (ValueError, TypeError):
         return False
 
+# Asynchronous function to call the API and get user information
 async def call_api_info_async(token):
     return {
         "code": 0,
@@ -112,6 +102,7 @@ async def call_api_info_async(token):
         }
     }
 
+# Function to connect to a WebSocket using a proxy
 async def connect_socket_proxy(proxy, user_agent, token, reconnect_interval=RETRY_INTERVAL, ping_interval=PING_INTERVAL):
     if not is_valid_proxy(proxy):
         logger.error(f"Invalid proxy URL: {proxy}")
@@ -126,8 +117,6 @@ async def connect_socket_proxy(proxy, user_agent, token, reconnect_interval=RETR
 
     try:
         proxy_instance = Proxy.from_url(proxy_url)
-        
-        # Log request details
         logger.info(f"Connecting to WebSocket with proxy: {proxy_url}")
         
         async with proxy_connect(WEBSOCKET_URL, ssl=ssl_context, proxy=proxy_instance) as websocket:
@@ -177,7 +166,6 @@ async def connect_socket_proxy(proxy, user_agent, token, reconnect_interval=RETR
                         logger.error("Failed to authenticate")
 
     except Exception as e:
-        # Log the detailed exception information
         logger.error(f"Connection error: {str(e)}")
         if hasattr(e, 'response') and e.response:
             logger.error(f"Response status: {e.response.status}")
@@ -191,6 +179,7 @@ async def connect_socket_proxy(proxy, user_agent, token, reconnect_interval=RETR
             await asyncio.sleep(reconnect_interval)
             return proxy
 
+# Function to handle graceful shutdown
 async def shutdown(loop, signal=None):
     if signal:
         logger.info(f"Received exit signal {signal.name}...")
@@ -206,6 +195,7 @@ async def shutdown(loop, signal=None):
     logger.info("All tasks cancelled, stopping loop")
     loop.stop()
 
+# Function to download the latest version of the script
 def download_latest_version():
     url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/{NODEPY_FILENAME}"
     response = requests.get(url)
@@ -213,19 +203,33 @@ def download_latest_version():
     with open(os.path.join(script_dir, NODEPY_FILENAME), 'wb') as f:
         f.write(response.content)
 
+# Function to check for updates and download if available
 def check_for_update():
     try:
-        download_latest_version()
-        logger.info("Downloaded latest version of node.py")
-        return True
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+        response = requests.get(url)
+        response.raise_for_status()
+        latest_release = response.json()
+        latest_version = latest_release["tag_name"]
+
+        if latest_version != CURRENT_VERSION:
+            logger.info(f"New version available: {latest_version}. Current version: {CURRENT_VERSION}")
+            download_latest_version()
+            logger.info("Downloaded latest version of node.py")
+            return True
+        else:
+            logger.info("No new version available.")
+            return False
     except Exception as e:
         logger.error(f"Error checking for update: {e}")
         return False
 
+# Function to restart the script
 def restart_script():
     python = sys.executable
     os.execl(python, python, *sys.argv)
 
+# Main function to run the program
 async def main():
     # Check for updates before starting
     if check_for_update():
