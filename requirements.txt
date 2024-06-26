@@ -1,4 +1,0 @@
-requests
-websockets
-loguru
-websockets-proxy
