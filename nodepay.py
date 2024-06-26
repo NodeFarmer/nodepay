@@ -134,7 +134,11 @@ async def connect_to_wss(proxy_url, user_id, token):
                     send_message = json.dumps(
                         {"id": guid, "action": "PING", **options})
                     logger.debug([proxy_url,send_message])
-                    await websocket.send(send_message)
+                    try:
+                        await websocket.send(send_message)
+                    except Exception as e:
+                        logger.error(e)
+                        logger.error(proxy_url)   
                     await asyncio.sleep(PING_INTERVAL)
 
             await asyncio.sleep(1)
