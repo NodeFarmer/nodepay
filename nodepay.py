@@ -26,9 +26,13 @@ def read_lines_file(file_path):
     with open(file_path, 'r') as f:
         return f.read().splitlines()
 
+# Function to filter out empty lines
+def filter_non_empty_lines(lines):
+    return [line for line in lines if line.strip()]
+
 # Read configuration values from files
 NP_TOKEN = read_single_line_file(os.path.join(script_dir, 'token.txt'))
-all_proxies = read_lines_file(os.path.join(script_dir, 'proxies.txt'))
+all_proxies = filter_non_empty_lines(read_lines_file(os.path.join(script_dir, 'proxies.txt')))
 
 # Constants
 WEBSOCKET_URL = "wss://nw.nodepay.ai:4576/websocket"
@@ -37,7 +41,7 @@ RETRY_INTERVAL = 60  # Retry interval for failed proxies in seconds
 PING_INTERVAL = 10  # Increased to reduce bandwidth usage
 EXTENSION_VERSION = "2.1.9"
 GITHUB_REPO = "NodeFarmer/nodepay"
-CURRENT_VERSION = "1.0.4"
+CURRENT_VERSION = "1.0.5"
 NODEPY_FILENAME = "nodepay.py"
 
 # Function to download the latest version of the script
