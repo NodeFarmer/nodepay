@@ -37,7 +37,7 @@ RETRY_INTERVAL = 60  # Retry interval for failed proxies in seconds
 PING_INTERVAL = 10  # Increased to reduce bandwidth usage
 EXTENSION_VERSION = "2.1.9"
 GITHUB_REPO = "NodeFarmer/nodepay"
-CURRENT_VERSION = "1.0.3"
+CURRENT_VERSION = "1.0.4"
 NODEPY_FILENAME = "nodepay.py"
 
 # Function to download the latest version of the script
@@ -178,15 +178,25 @@ async def main():
     if check_for_update():
         logger.info("Restarting script to apply new version...")
         restart_script()
-    # Fetch USER_ID from the API using the first proxy in the list
+    # Fetch USER_ID from the API using the first valid proxy in the list
     if NP_TOKEN != "":
-        first_proxy = format_proxy(all_proxies[0])
-        user_data = await call_api_info(NP_TOKEN, first_proxy)
-        logger.debug(user_data)
+        user_data = None
+        for proxy_string in all_proxies:
+            first_proxy = format_proxy(proxy_string)
+            try:
+                user_data = await call_api_info(NP_TOKEN, first_proxy)
+                break  # Exit loop if a valid proxy is found
+            except Exception as e:
+                logger.error(f"Proxy {first_proxy} is invalid: {e}")
+                continue  # Ignore invalid proxy and try the next one
+        
         if user_data:
+            logger.debug(user_data)
             USER_ID = user_data['data']['uid']
             tasks = [asyncio.ensure_future(connect_to_wss(format_proxy(proxy_string), USER_ID, NP_TOKEN)) for proxy_string in all_proxies]
             await asyncio.gather(*tasks)
+        else:
+            logger.error("No valid proxy found.")
     else:
         logger.error("You need to specify NP_TOKEN value inside token.txt")
 
