@@ -37,10 +37,8 @@ RETRY_INTERVAL = 60  # Retry interval for failed proxies in seconds
 PING_INTERVAL = 10  # Increased to reduce bandwidth usage
 EXTENSION_VERSION = "2.1.9"
 GITHUB_REPO = "NodeFarmer/nodepay"
-CURRENT_VERSION = "1.0.2"
+CURRENT_VERSION = "1.0.3"
 NODEPY_FILENAME = "nodepay.py"
-
-
 
 # Function to download the latest version of the script
 def download_latest_version():
@@ -97,16 +95,22 @@ def format_proxy(proxy_string):
     
     return formatted_proxy
 
-async def call_api_info(token):
+async def call_api_info(token, proxy_url):
     logger.info("Getting UserID")
     headers = {'Content-Type': 'application/json'}
     if token:
         headers['Authorization'] = f'Bearer {token}'
     
+    proxy_dict = {
+        'http': proxy_url,
+        'https': proxy_url
+    }
+    
     response = requests.post(
         "https://api.nodepay.ai/api/auth/session",
         headers=headers,
-        json={}
+        json={},
+        proxies=proxy_dict
     )
     response.raise_for_status()
     return response.json()
@@ -130,44 +134,40 @@ async def connect_to_wss(proxy_url, user_id, token):
             websocket = await websocket_connect(WEBSOCKET_URL, ssl=ssl_context, extra_headers=custom_headers, sock=conn)
 
             async def send_ping(guid, options={}):
-                    send_message = json.dumps(
-                        {"id": guid, "action": "PING", **options})
-                    logger.debug([proxy_url,send_message])
-                    try:
-                        await websocket.send(send_message)
-                    except Exception as e:
-                        logger.error(e)
-                        logger.error(proxy_url)
-                    
-
-            #await asyncio.sleep(1)
-            #asyncio.create_task(send_ping(str(uuid.uuid4())))
+                send_message = json.dumps(
+                    {"id": guid, "action": "PING", **options})
+                logger.debug([proxy_url, send_message])
+                try:
+                    await websocket.send(send_message)
+                except Exception as e:
+                    logger.error(e)
+                    logger.error(proxy_url)
 
             while True:
                 response = await websocket.recv()
                 message = json.loads(response)
                 if message.get("action") == "AUTH":
                     auth_response = {
-                            "user_id": user_id,
-                            "browser_id": browser_id,
-                            "user_agent": custom_headers['User-Agent'],
-                            "timestamp": int(time.time()),
-                            "device_type": "extension",
-                            "version": EXTENSION_VERSION,
-                            "token": token,
-                            "origin_action": "AUTH"
+                        "user_id": user_id,
+                        "browser_id": browser_id,
+                        "user_agent": custom_headers['User-Agent'],
+                        "timestamp": int(time.time()),
+                        "device_type": "extension",
+                        "version": EXTENSION_VERSION,
+                        "token": token,
+                        "origin_action": "AUTH"
                     }
                     await send_ping(message["id"], auth_response)
 
                 elif message.get("action") == "PONG":
                     pong_response = {"id": message["id"], "origin_action": "PONG"}
-                    logger.debug([proxy_url,pong_response])
+                    logger.debug([proxy_url, pong_response])
                     await websocket.send(json.dumps(pong_response))
                     await asyncio.sleep(PING_INTERVAL)
                     await send_ping(message["id"])
         except Exception as e:
-            if 'SSL: WRONG_VERSION_NUMBER' in str(e) or str(e) == "" :
-                logger.info([proxy_url,"Server seems busy we keep trying to connect"])
+            if 'SSL: WRONG_VERSION_NUMBER' in str(e) or str(e) == "":
+                logger.info([proxy_url, "Server seems busy we keep trying to connect"])
             else:
                 logger.error(e)
                 logger.error(proxy_url)
@@ -178,9 +178,10 @@ async def main():
     if check_for_update():
         logger.info("Restarting script to apply new version...")
         restart_script()
-    # Fetch USER_ID from the API
+    # Fetch USER_ID from the API using the first proxy in the list
     if NP_TOKEN != "":
-        user_data = await call_api_info(NP_TOKEN)
+        first_proxy = format_proxy(all_proxies[0])
+        user_data = await call_api_info(NP_TOKEN, first_proxy)
         logger.debug(user_data)
         if user_data:
             USER_ID = user_data['data']['uid']
