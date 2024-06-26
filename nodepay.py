@@ -121,7 +121,7 @@ async def connect_to_wss(proxy_url, user_id, token):
             custom_headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
             }
-            ssl_context = ssl.create_default_context()
+            ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
             ssl_context.check_hostname = False
             ssl_context.verify_mode = ssl.CERT_NONE
 
@@ -130,7 +130,6 @@ async def connect_to_wss(proxy_url, user_id, token):
             websocket = await websocket_connect(WEBSOCKET_URL, ssl=ssl_context, extra_headers=custom_headers, sock=conn)
 
             async def send_ping(guid, options={}):
-                while True:
                     send_message = json.dumps(
                         {"id": guid, "action": "PING", **options})
                     logger.debug([proxy_url,send_message])
@@ -138,11 +137,11 @@ async def connect_to_wss(proxy_url, user_id, token):
                         await websocket.send(send_message)
                     except Exception as e:
                         logger.error(e)
-                        logger.error(proxy_url)   
-                    await asyncio.sleep(PING_INTERVAL)
+                        logger.error(proxy_url)
+                    
 
-            await asyncio.sleep(1)
-            asyncio.create_task(send_ping(str(uuid.uuid4())))
+            #await asyncio.sleep(1)
+            #asyncio.create_task(send_ping(str(uuid.uuid4())))
 
             while True:
                 response = await websocket.recv()
@@ -164,9 +163,14 @@ async def connect_to_wss(proxy_url, user_id, token):
                     pong_response = {"id": message["id"], "origin_action": "PONG"}
                     logger.debug([proxy_url,pong_response])
                     await websocket.send(json.dumps(pong_response))
+                    await asyncio.sleep(PING_INTERVAL)
+                    await send_ping(message["id"])
         except Exception as e:
-            logger.error(e)
-            logger.error(proxy_url)
+            if 'SSL: WRONG_VERSION_NUMBER' in str(e) or str(e) == "" :
+                logger.info([proxy_url,"Server seems busy we keep trying to connect"])
+            else:
+                logger.error(e)
+                logger.error(proxy_url)
 
 # Main function to run the program
 async def main():
