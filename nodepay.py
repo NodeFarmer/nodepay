@@ -18,8 +18,10 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # Function to read a single-line token from a file
 def read_single_line_file(file_path):
-    with open(file_path, 'r') as f:
-        return f.read().strip()
+    if os.path.exists(file_path):
+        with open(file_path, 'r') as f:
+            return f.read().strip()
+    return None
 
 # Function to read multiple lines from a file
 def read_lines_file(file_path):
@@ -33,6 +35,7 @@ def filter_non_empty_lines(lines):
 # Read configuration values from files
 NP_TOKEN = read_single_line_file(os.path.join(script_dir, 'token.txt'))
 all_proxies = filter_non_empty_lines(read_lines_file(os.path.join(script_dir, 'proxies.txt')))
+proxy_type = read_single_line_file(os.path.join(script_dir, 'proxy-config.txt')) or 'http'
 
 # Constants
 WEBSOCKET_URL = "wss://nw.nodepay.ai:4576/websocket"
@@ -41,7 +44,7 @@ RETRY_INTERVAL = 60  # Retry interval for failed proxies in seconds
 PING_INTERVAL = 10  # Increased to reduce bandwidth usage
 EXTENSION_VERSION = "2.1.9"
 GITHUB_REPO = "NodeFarmer/nodepay"
-CURRENT_VERSION = "1.0.5"
+CURRENT_VERSION = "1.0.6"
 NODEPY_FILENAME = "nodepay.py"
 
 # Function to download the latest version of the script
@@ -78,22 +81,29 @@ def restart_script():
     python = sys.executable
     os.execl(python, python, *sys.argv)
 
-def format_proxy(proxy_string):
-    # Check and handle different formats
+def format_proxy(proxy_string, proxy_type):
+    prefix = ''
+    if proxy_type in ['http', 'https']:
+        prefix = 'http://'
+    elif proxy_type in ['socks', 'socks5']:
+        prefix = 'socks5://'
+    else:
+        raise ValueError("Invalid proxy type")
+    
     if '@' in proxy_string:
         # Format: user:pwd@ip:port
         user_pwd, ip_port = proxy_string.split('@')
         user, pwd = user_pwd.split(':')
         ip, port = ip_port.split(':')
-        formatted_proxy = f"http://{user}:{pwd}@{ip}:{port}"
+        formatted_proxy = f"{prefix}{user}:{pwd}@{ip}:{port}"
     elif proxy_string.count(':') == 3:
         # Format: IP:PORT:USERNAME:PASSWORD
         ip, port, user, pwd = proxy_string.split(':')
-        formatted_proxy = f"http://{user}:{pwd}@{ip}:{port}"
+        formatted_proxy = f"{prefix}{user}:{pwd}@{ip}:{port}"
     elif proxy_string.count(':') == 1:
         # Format: IP:PORT (No user or password)
         ip, port = proxy_string.split(':')
-        formatted_proxy = f"http://{ip}:{port}"
+        formatted_proxy = f"{prefix}{ip}:{port}"
     else:
         raise ValueError("Invalid proxy string format")
     
@@ -186,7 +196,7 @@ async def main():
     if NP_TOKEN != "":
         user_data = None
         for proxy_string in all_proxies:
-            first_proxy = format_proxy(proxy_string)
+            first_proxy = format_proxy(proxy_string, proxy_type)
             try:
                 user_data = await call_api_info(NP_TOKEN, first_proxy)
                 break  # Exit loop if a valid proxy is found
@@ -197,7 +207,7 @@ async def main():
         if user_data:
             logger.debug(user_data)
             USER_ID = user_data['data']['uid']
-            tasks = [asyncio.ensure_future(connect_to_wss(format_proxy(proxy_string), USER_ID, NP_TOKEN)) for proxy_string in all_proxies]
+            tasks = [asyncio.ensure_future(connect_to_wss(format_proxy(proxy_string, proxy_type), USER_ID, NP_TOKEN)) for proxy_string in all_proxies]
             await asyncio.gather(*tasks)
         else:
             logger.error("No valid proxy found.")
