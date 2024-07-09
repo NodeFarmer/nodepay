@@ -6,7 +6,6 @@ import time
 import uuid
 from loguru import logger
 from python_socks.async_.asyncio import Proxy
-from websockets import connect as websocket_connect
 from urllib.parse import urlparse
 import os
 import ssl
@@ -38,13 +37,11 @@ all_proxies = filter_non_empty_lines(read_lines_file(os.path.join(script_dir, 'p
 proxy_type = read_single_line_file(os.path.join(script_dir, 'proxy-config.txt')) or 'http'
 
 # Constants
-WEBSOCKET_URL = "wss://nw.nodepay.ai:4576/websocket"
-SERVER_HOSTNAME = "nw.nodepay.ai"
+HTTPS_URL = "https://nw2.nodepay.ai/api/network/ping"
 RETRY_INTERVAL = 60  # Retry interval for failed proxies in seconds
-PING_INTERVAL = 10  # Increased to reduce bandwidth usage
-EXTENSION_VERSION = "2.1.9"
+EXTENSION_VERSION = "2.2.3"
 GITHUB_REPO = "NodeFarmer/nodepay"
-CURRENT_VERSION = "1.0.6"
+CURRENT_VERSION = "1.1.0"
 NODEPY_FILENAME = "nodepay.py"
 
 # Function to download the latest version of the script
@@ -129,62 +126,34 @@ async def call_api_info(token, proxy_url):
     response.raise_for_status()
     return response.json()
 
-async def connect_to_wss(proxy_url, user_id, token):
+async def send_ping(proxy_url, user_id, token):
     logger.info(proxy_url)
     browser_id = str(uuid.uuid3(uuid.NAMESPACE_DNS, proxy_url))
     logger.info(browser_id)
     while True:
         try:
-            await asyncio.sleep(random.randint(1, 10) / 10)
-            custom_headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+                'Content-Type': 'application/json'
             }
-            ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
-
-            proxy = Proxy.from_url(proxy_url)
-            conn = await proxy.connect(dest_host=SERVER_HOSTNAME, dest_port=443)
-            websocket = await websocket_connect(WEBSOCKET_URL, ssl=ssl_context, extra_headers=custom_headers, sock=conn)
-
-            async def send_ping(guid, options={}):
-                send_message = json.dumps(
-                    {"id": guid, "action": "PING", **options})
-                logger.debug([proxy_url, send_message])
-                try:
-                    await websocket.send(send_message)
-                except Exception as e:
-                    logger.error(e)
-                    logger.error(proxy_url)
-
-            while True:
-                response = await websocket.recv()
-                message = json.loads(response)
-                if message.get("action") == "AUTH":
-                    auth_response = {
-                        "user_id": user_id,
-                        "browser_id": browser_id,
-                        "user_agent": custom_headers['User-Agent'],
-                        "timestamp": int(time.time()),
-                        "device_type": "extension",
-                        "version": EXTENSION_VERSION,
-                        "token": token,
-                        "origin_action": "AUTH"
-                    }
-                    await send_ping(message["id"], auth_response)
-
-                elif message.get("action") == "PONG":
-                    pong_response = {"id": message["id"], "origin_action": "PONG"}
-                    logger.debug([proxy_url, pong_response])
-                    await websocket.send(json.dumps(pong_response))
-                    await asyncio.sleep(PING_INTERVAL)
-                    await send_ping(message["id"])
+            headers['Authorization'] = f'Bearer {token}'
+            payload = {
+                "user_id": user_id,
+                "browser_id": browser_id,
+                "timestamp": int(time.time()),
+                "version": EXTENSION_VERSION
+            }
+            proxy_dict = {
+                'http': proxy_url,
+                'https': proxy_url
+            }
+            response = requests.post(HTTPS_URL, headers=headers, json=payload, proxies=proxy_dict)
+            response.raise_for_status()
+            logger.debug(response.json())
+            await asyncio.sleep(10)  # Wait for a while before the next action
         except Exception as e:
-            if 'SSL: WRONG_VERSION_NUMBER' in str(e) or str(e) == "":
-                logger.info([proxy_url, "Server seems busy we keep trying to connect"])
-            else:
-                logger.error(e)
-                logger.error(proxy_url)
+            logger.error(e)
+            await asyncio.sleep(RETRY_INTERVAL)
 
 # Main function to run the program
 async def main():
@@ -207,7 +176,7 @@ async def main():
         if user_data:
             logger.debug(user_data)
             USER_ID = user_data['data']['uid']
-            tasks = [asyncio.ensure_future(connect_to_wss(format_proxy(proxy_string, proxy_type), USER_ID, NP_TOKEN)) for proxy_string in all_proxies]
+            tasks = [asyncio.ensure_future(send_ping(format_proxy(proxy_string, proxy_type), USER_ID, NP_TOKEN)) for proxy_string in all_proxies]
             await asyncio.gather(*tasks)
         else:
             logger.error("No valid proxy found.")
