@@ -41,7 +41,7 @@ HTTPS_URL = "https://nw.nodepay.org/api/network/ping"
 RETRY_INTERVAL = 60  # Retry interval for failed proxies in seconds
 EXTENSION_VERSION = "2.2.7"
 GITHUB_REPO = "NodeFarmer/nodepay"
-CURRENT_VERSION = "1.2.1"
+CURRENT_VERSION = "1.2.2"
 NODEPY_FILENAME = "nodepay.py"
 
 # Function to download the latest version of the script
