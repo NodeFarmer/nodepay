@@ -118,7 +118,7 @@ async def call_api_info(token, proxy_url):
     }
     
     response = requests.post(
-        "https://api.nodepay.ai/api/auth/session",
+        "https://api.nodepay.org/api/auth/session",
         headers=headers,
         json={},
         proxies=proxy_dict
