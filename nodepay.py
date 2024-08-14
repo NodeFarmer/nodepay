@@ -131,7 +131,7 @@ def _uuidv4():
     def replace_func(c):
         c = int(c)
         return hex(c ^ (secrets.randbits(8) & (15 >> (c // 4))))[2:]
-    return uuid.UUID(template.translate({ord(c): replace_func(c) for c in '018'}))
+    return str(uuid.UUID(template.translate({ord(c): replace_func(c) for c in '018'})))
 async def send_ping(proxy_url, user_id, token):
     logger.info(proxy_url)
     browser_id = _uuidv4()
