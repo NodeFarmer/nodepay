@@ -11,7 +11,6 @@ import os
 import ssl
 import sys
 import random
-import secrets
 
 # Determine the directory where the script is located
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -38,7 +37,7 @@ all_proxies = filter_non_empty_lines(read_lines_file(os.path.join(script_dir, 'p
 proxy_type = read_single_line_file(os.path.join(script_dir, 'proxy-config.txt')) or 'http'
 
 # Constants
-HTTPS_URL = "https://nw.nodepay.ai/api/network/ping"
+HTTPS_URL = "https://nw.nodepay.org/api/network/ping"
 RETRY_INTERVAL = 60  # Retry interval for failed proxies in seconds
 EXTENSION_VERSION = "2.2.7"
 GITHUB_REPO = "NodeFarmer/nodepay"
@@ -126,12 +125,9 @@ async def call_api_info(token, proxy_url):
     )
     response.raise_for_status()
     return response.json()
-def _uuidv4():
-    template = "10000000-1000-4000-8000-100000000000"
-    def replace_func(c):
-        c = int(c)
-        return hex(c ^ (secrets.randbits(8) & (15 >> (c // 4))))[2:]
-    return str(uuid.UUID(template.translate({ord(c): replace_func(c) for c in '018'})))
+def uuidv4():
+    return '10000000-1000-4000-8000-100000000000'.replace('0', lambda _: f'{os.urandom(1)[0] & 0xf:x}').replace('1', lambda _: f'{(os.urandom(1)[0] & 0xf) | 0x8:x}').replace('4', lambda _: '4')
+    
 async def send_ping(proxy_url, user_id, token):
     logger.info(proxy_url)
     browser_id = _uuidv4()
