@@ -41,7 +41,7 @@ HTTPS_URL = "https://nw.nodepay.org/api/network/ping"
 RETRY_INTERVAL = 60  # Retry interval for failed proxies in seconds
 EXTENSION_VERSION = "2.2.7"
 GITHUB_REPO = "NodeFarmer/nodepay"
-CURRENT_VERSION = "1.2.3"
+CURRENT_VERSION = "1.2.4"
 NODEPY_FILENAME = "nodepay.py"
 
 # Function to download the latest version of the script
@@ -125,12 +125,13 @@ async def call_api_info(token, proxy_url):
     )
     response.raise_for_status()
     return response.json()
+
 def uuidv4():
     return '10000000-1000-4000-8000-100000000000'.replace('0', lambda _: f'{os.urandom(1)[0] & 0xf:x}').replace('1', lambda _: f'{(os.urandom(1)[0] & 0xf) | 0x8:x}').replace('4', lambda _: '4')
-    
+
 async def send_ping(proxy_url, user_id, token):
     logger.info(proxy_url)
-    browser_id = _uuidv4()
+    browser_id = uuidv4()
     logger.info(browser_id)
     while True:
         try:
@@ -163,27 +164,38 @@ async def main():
     if check_for_update():
         logger.info("Restarting script to apply new version...")
         restart_script()
-    # Fetch USER_ID from the API using the first valid proxy in the list
-    if NP_TOKEN != "":
-        user_data = None
-        for proxy_string in all_proxies:
-            first_proxy = format_proxy(proxy_string, proxy_type)
-            try:
-                user_data = await call_api_info(NP_TOKEN, first_proxy)
-                break  # Exit loop if a valid proxy is found
-            except Exception as e:
-                logger.error(f"Proxy {first_proxy} is invalid: {e}")
-                continue  # Ignore invalid proxy and try the next one
-        
-        if user_data:
-            logger.debug(user_data)
-            USER_ID = user_data['data']['uid']
-            tasks = [asyncio.ensure_future(send_ping(format_proxy(proxy_string, proxy_type), USER_ID, NP_TOKEN)) for proxy_string in all_proxies]
-            await asyncio.gather(*tasks)
+    
+    # Try up to 3 times to authenticate
+    max_attempts = 3
+    attempt = 0
+    user_data = None
+
+    while attempt < max_attempts and user_data is None:
+        attempt += 1
+        logger.info(f"Authentication attempt {attempt} of {max_attempts}")
+        if NP_TOKEN != "":
+            for proxy_string in all_proxies:
+                first_proxy = format_proxy(proxy_string, proxy_type)
+                try:
+                    user_data = await call_api_info(NP_TOKEN, first_proxy)
+                    break  # Exit loop if a valid proxy is found
+                except Exception as e:
+                    logger.error(f"Proxy {first_proxy} is invalid: {e}")
+                    continue  # Ignore invalid proxy and try the next one
         else:
-            logger.error("No valid proxy found.")
+            logger.error("You need to specify NP_TOKEN value inside token.txt")
+            break  # Exit the loop if no token is provided
+
+        if user_data is None:
+            logger.warning("Authentication failed. Retrying...")
+
+    if user_data:
+        logger.debug(user_data)
+        USER_ID = user_data['data']['uid']
+        tasks = [asyncio.ensure_future(send_ping(format_proxy(proxy_string, proxy_type), USER_ID, NP_TOKEN)) for proxy_string in all_proxies]
+        await asyncio.gather(*tasks)
     else:
-        logger.error("You need to specify NP_TOKEN value inside token.txt")
+        logger.error("Authentication failed after 3 attempts. Exiting.")
 
 if __name__ == '__main__':
     asyncio.run(main())
