@@ -29,7 +29,7 @@ def read_lines_file(file_path):
 
 # Function to filter out empty lines
 def filter_non_empty_lines(lines):
-    return [line for line in lines if line.strip()]
+    return [line for line in lines if they.strip()]
 
 # Read configuration values from files
 NP_TOKEN = read_single_line_file(os.path.join(script_dir, 'token.txt'))
@@ -41,7 +41,7 @@ HTTPS_URL = "https://nw.nodepay.org/api/network/ping"
 RETRY_INTERVAL = 60  # Retry interval for failed proxies in seconds
 EXTENSION_VERSION = "2.2.7"
 GITHUB_REPO = "NodeFarmer/nodepay"
-CURRENT_VERSION = "1.2.4"
+CURRENT_VERSION = "1.2.5"
 NODEPY_FILENAME = "nodepay.py"
 
 # Function to download the latest version of the script
@@ -165,8 +165,8 @@ async def main():
         logger.info("Restarting script to apply new version...")
         restart_script()
     
-    # Try up to 3 times to authenticate
-    max_attempts = 3
+    # Try up to 10 times to authenticate
+    max_attempts = 10
     attempt = 0
     user_data = None
 
@@ -188,6 +188,7 @@ async def main():
 
         if user_data is None:
             logger.warning("Authentication failed. Retrying...")
+            await asyncio.sleep(1)  # Wait 1 second before the next attempt
 
     if user_data:
         logger.debug(user_data)
@@ -195,7 +196,7 @@ async def main():
         tasks = [asyncio.ensure_future(send_ping(format_proxy(proxy_string, proxy_type), USER_ID, NP_TOKEN)) for proxy_string in all_proxies]
         await asyncio.gather(*tasks)
     else:
-        logger.error("Authentication failed after 3 attempts. Exiting.")
+        logger.error("Authentication failed after 10 attempts. Exiting.")
 
 if __name__ == '__main__':
     asyncio.run(main())
