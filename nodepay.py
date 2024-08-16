@@ -29,7 +29,7 @@ def read_lines_file(file_path):
 
 # Function to filter out empty lines
 def filter_non_empty_lines(lines):
-    return [line for line in lines if they.strip()]
+    return [line for line in lines if line.strip()]
 
 # Read configuration values from files
 NP_TOKEN = read_single_line_file(os.path.join(script_dir, 'token.txt'))
