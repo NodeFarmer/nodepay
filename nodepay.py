@@ -37,11 +37,11 @@ all_proxies = filter_non_empty_lines(read_lines_file(os.path.join(script_dir, 'p
 proxy_type = read_single_line_file(os.path.join(script_dir, 'proxy-config.txt')) or 'http'
 
 # Constants
-HTTPS_URL = "https://nw.nodepay.org/api/network/ping"
+HTTPS_URL = "http://54.255.192.166/api/network/ping"
 RETRY_INTERVAL = 60  # Retry interval for failed proxies in seconds
 EXTENSION_VERSION = "2.2.7"
 GITHUB_REPO = "NodeFarmer/nodepay"
-CURRENT_VERSION = "1.2.6"
+CURRENT_VERSION = "1.3.0"
 NODEPY_FILENAME = "nodepay.py"
 
 # Function to download the latest version of the script
@@ -118,7 +118,7 @@ async def call_api_info(token, proxy_url):
     }
     
     response = requests.post(
-        "https://api.nodepay.org/api/auth/session",
+        "http://18.136.143.169/api/auth/session",
         headers=headers,
         json={},
         proxies=proxy_dict
