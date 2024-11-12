@@ -41,7 +41,7 @@ HTTPS_URL = "http://54.255.192.166/api/network/ping"
 RETRY_INTERVAL = 60  # Retry interval for failed proxies in seconds
 EXTENSION_VERSION = "2.2.7"
 GITHUB_REPO = "NodeFarmer/nodepay"
-CURRENT_VERSION = "1.3.0"
+CURRENT_VERSION = "1.3.1"
 NODEPY_FILENAME = "nodepay.py"
 
 # Function to download the latest version of the script
@@ -127,8 +127,12 @@ async def call_api_info(token, proxy_url):
     return response.json()
 
 def uuidv4():
-    return '10000000-1000-4000-8000-100000000000'.replace('0', lambda _: f'{os.urandom(1)[0] & 0xf:x}').replace('1', lambda _: f'{(os.urandom(1)[0] & 0xf) | 0x8:x}').replace('4', lambda _: '4')
-
+    template = "10000000-1000-4000-8000-100000000000"
+    return ''.join([
+        hex(random.randint(0, 15) ^ (random.getrandbits(8) & (15 >> (int(c) // 4))))[2:]
+        if c in '018' else c
+        for c in template
+    ])
 async def send_ping(proxy_url, user_id, token):
     logger.info(proxy_url)
     browser_id = uuidv4()
