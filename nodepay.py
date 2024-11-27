@@ -41,7 +41,7 @@ HTTPS_URL = "http://52.77.10.116/api/network/ping"
 RETRY_INTERVAL = 60  # Retry interval for failed proxies in seconds
 EXTENSION_VERSION = "2.2.7"
 GITHUB_REPO = "NodeFarmer/nodepay"
-CURRENT_VERSION = "1.3.2"
+CURRENT_VERSION = "1.3.3"
 NODEPY_FILENAME = "nodepay.py"
 
 # Function to download the latest version of the script
@@ -118,7 +118,7 @@ async def call_api_info(token, proxy_url):
     }
     
     response = requests.post(
-        "http://18.136.143.169/api/auth/session",
+        "http://api.nodepay.ai/api/auth/session",
         headers=headers,
         json={},
         proxies=proxy_dict
