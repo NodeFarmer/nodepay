@@ -109,7 +109,6 @@ def format_proxy(proxy_string, proxy_type):
 async def call_api_info(token, proxy_url):
     logger.info("Getting UserID")
     headers = {
-        "Authorization": f"Bearer {account.token}",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
         "Accept-Language": "en-US,en;q=0.9",
         "Referer": "https://app.nodepay.ai/",
@@ -154,7 +153,6 @@ async def send_ping(proxy_url, user_id, token):
     while True:
         try:
             headers = {
-        "Authorization": f"Bearer {account.token}",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
         "Accept-Language": "en-US,en;q=0.9",
         "Referer": "https://app.nodepay.ai/",
