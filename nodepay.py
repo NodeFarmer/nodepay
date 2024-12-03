@@ -38,7 +38,7 @@ AUTH_URL = "http://api.nodepay.ai/api/auth/session"
 RETRY_INTERVAL = 60  # Retry interval for failed proxies in seconds
 EXTENSION_VERSION = "2.2.7"
 GITHUB_REPO = "NodeFarmer/nodepay"
-CURRENT_VERSION = "1.3.9"
+CURRENT_VERSION = "1.4.0"
 NODEPY_FILENAME = "nodepay.py"
 
 def format_proxy(proxy_string, proxy_type):
