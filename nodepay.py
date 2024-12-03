@@ -1,15 +1,11 @@
 import asyncio
 import signal
-import requests
+import cloudscraper
 import json
 import time
 import uuid
 from loguru import logger
-from python_socks.async_.asyncio import Proxy
-from urllib.parse import urlparse
 import os
-import ssl
-import sys
 import random
 
 # Determine the directory where the script is located
@@ -41,42 +37,8 @@ HTTPS_URL = "http://52.77.10.116/api/network/ping"
 RETRY_INTERVAL = 60  # Retry interval for failed proxies in seconds
 EXTENSION_VERSION = "2.2.7"
 GITHUB_REPO = "NodeFarmer/nodepay"
-CURRENT_VERSION = "1.3.8"
+CURRENT_VERSION = "1.3.9"
 NODEPY_FILENAME = "nodepay.py"
-
-# Function to download the latest version of the script
-def download_latest_version():
-    url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/{NODEPY_FILENAME}"
-    response = requests.get(url)
-    response.raise_for_status()
-    with open(os.path.join(script_dir, NODEPY_FILENAME), 'wb') as f:
-        f.write(response.content)
-
-# Function to check for updates and download if available
-def check_for_update():
-    try:
-        url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
-        response = requests.get(url)
-        response.raise_for_status()
-        latest_release = response.json()
-        latest_version = latest_release["tag_name"]
-
-        if latest_version != CURRENT_VERSION:
-            logger.info(f"New version available: {latest_version}. Current version: {CURRENT_VERSION}")
-            download_latest_version()
-            logger.info("Downloaded latest version of nodepay.py")
-            return True
-        else:
-            logger.info("No new version available.")
-            return False
-    except Exception as e:
-        logger.error(f"Error checking for update: {e}")
-        return False
-
-# Function to restart the script
-def restart_script():
-    python = sys.executable
-    os.execl(python, python, *sys.argv)
 
 def format_proxy(proxy_string, proxy_type):
     prefix = ''
@@ -108,6 +70,7 @@ def format_proxy(proxy_string, proxy_type):
 
 async def call_api_info(token, proxy_url):
     logger.info("Getting UserID")
+    scraper = cloudscraper.create_scraper()
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
         "Accept-Language": "en-US,en;q=0.9",
@@ -115,26 +78,20 @@ async def call_api_info(token, proxy_url):
         "Accept": "application/json, text/plain, */*",
         "Content-Type": "application/json",
         "Origin": "chrome-extension://lgmpfmgeabnnlemejacfljbmonaomfmm",
-        "Sec-Ch-Ua": '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"',
-        "Sec-Ch-Ua-Mobile": "?0",
-        "Sec-Ch-Ua-Platform": '"Windows"',
-        "sec-fetch-dest": "empty",
-        "sec-fetch-mode": "cors",
-        "sec-fetch-site": "cors-site"
     }
     if token:
         headers['Authorization'] = f'Bearer {token}'
     
-    proxy_dict = {
+    proxies = {
         'http': proxy_url,
         'https': proxy_url
     }
     
-    response = requests.post(
+    response = scraper.post(
         "http://api.nodepay.ai/api/auth/session",
         headers=headers,
         json={},
-        proxies=proxy_dict
+        proxies=proxies
     )
     response.raise_for_status()
     return response.json()
@@ -146,26 +103,22 @@ def uuidv4():
         if c in '018' else c
         for c in template
     ])
+
 async def send_ping(proxy_url, user_id, token):
     logger.info(proxy_url)
     browser_id = uuidv4()
     logger.info(browser_id)
+    scraper = cloudscraper.create_scraper()
     while True:
         try:
             headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://app.nodepay.ai/",
-        "Accept": "application/json, text/plain, */*",
-        "Content-Type": "application/json",
-        "Origin": "chrome-extension://lgmpfmgeabnnlemejacfljbmonaomfmm",
-        "Sec-Ch-Ua": '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"',
-        "Sec-Ch-Ua-Mobile": "?0",
-        "Sec-Ch-Ua-Platform": '"Windows"',
-        "sec-fetch-dest": "empty",
-        "sec-fetch-mode": "cors",
-        "sec-fetch-site": "cors-site"
-    }
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Referer": "https://app.nodepay.ai/",
+                "Accept": "application/json, text/plain, */*",
+                "Content-Type": "application/json",
+                "Origin": "chrome-extension://lgmpfmgeabnnlemejacfljbmonaomfmm",
+            }
             headers['Authorization'] = f'Bearer {token}'
             payload = {
                 "user_id": user_id,
@@ -173,11 +126,11 @@ async def send_ping(proxy_url, user_id, token):
                 "timestamp": int(time.time()),
                 "version": EXTENSION_VERSION
             }
-            proxy_dict = {
+            proxies = {
                 'http': proxy_url,
                 'https': proxy_url
             }
-            response = requests.post(HTTPS_URL, headers=headers, json=payload, proxies=proxy_dict)
+            response = scraper.post(HTTPS_URL, headers=headers, json=payload, proxies=proxies)
             response.raise_for_status()
             logger.debug(response.json())
             await asyncio.sleep(10)  # Wait for a while before the next action
@@ -187,12 +140,6 @@ async def send_ping(proxy_url, user_id, token):
 
 # Main function to run the program
 async def main():
-    # Check for updates before starting
-    if check_for_update():
-        logger.info("Restarting script to apply new version...")
-        restart_script()
-    
-    # Try up to 10 times to authenticate
     max_attempts = 10
     attempt = 0
     user_data = None
@@ -208,14 +155,14 @@ async def main():
                     break  # Exit loop if a valid proxy is found
                 except Exception as e:
                     logger.error(f"Proxy {first_proxy} is invalid: {e}")
-                    continue  # Ignore invalid proxy and try the next one
+                    continue
         else:
             logger.error("You need to specify NP_TOKEN value inside token.txt")
-            break  # Exit the loop if no token is provided
+            break
 
         if user_data is None:
             logger.warning("Authentication failed. Retrying...")
-            await asyncio.sleep(1)  # Wait 1 second before the next attempt
+            await asyncio.sleep(1)
 
     if user_data:
         logger.debug(user_data)
