@@ -33,7 +33,8 @@ all_proxies = filter_non_empty_lines(read_lines_file(os.path.join(script_dir, 'p
 proxy_type = read_single_line_file(os.path.join(script_dir, 'proxy-config.txt')) or 'http'
 
 # Constants
-HTTPS_URL = "http://52.77.10.116/api/network/ping"
+PING_URL = "https://nw2.nodepay.org/api/network/ping"
+AUTH_URL = "http://api.nodepay.ai/api/auth/session"
 RETRY_INTERVAL = 60  # Retry interval for failed proxies in seconds
 EXTENSION_VERSION = "2.2.7"
 GITHUB_REPO = "NodeFarmer/nodepay"
@@ -88,7 +89,7 @@ async def call_api_info(token, proxy_url):
     }
     
     response = scraper.post(
-        "http://api.nodepay.ai/api/auth/session",
+        AUTH_URL,
         headers=headers,
         json={},
         proxies=proxies
@@ -130,7 +131,7 @@ async def send_ping(proxy_url, user_id, token):
                 'http': proxy_url,
                 'https': proxy_url
             }
-            response = scraper.post(HTTPS_URL, headers=headers, json=payload, proxies=proxies)
+            response = scraper.post(PING_URL, headers=headers, json=payload, proxies=proxies)
             response.raise_for_status()
             logger.debug(response.json())
             await asyncio.sleep(10)  # Wait for a while before the next action
