@@ -1,12 +1,14 @@
 import asyncio
 import signal
 import cloudscraper
+import requests
 import json
 import time
 import uuid
 from loguru import logger
 import os
 import random
+import sys
 
 # Determine the directory where the script is located
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -40,6 +42,40 @@ EXTENSION_VERSION = "2.2.7"
 GITHUB_REPO = "NodeFarmer/nodepay"
 CURRENT_VERSION = "1.4.0"
 NODEPY_FILENAME = "nodepay.py"
+
+# Function to download the latest version of the script
+def download_latest_version():
+    url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/{NODEPY_FILENAME}"
+    response = requests.get(url)
+    response.raise_for_status()
+    with open(os.path.join(script_dir, NODEPY_FILENAME), 'wb') as f:
+        f.write(response.content)
+
+# Function to check for updates and download if available
+def check_for_update():
+    try:
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+        response = requests.get(url)
+        response.raise_for_status()
+        latest_release = response.json()
+        latest_version = latest_release["tag_name"]
+
+        if latest_version != CURRENT_VERSION:
+            logger.info(f"New version available: {latest_version}. Current version: {CURRENT_VERSION}")
+            download_latest_version()
+            logger.info("Downloaded latest version of nodepay.py")
+            return True
+        else:
+            logger.info("No new version available.")
+            return False
+    except Exception as e:
+        logger.error(f"Error checking for update: {e}")
+        return False
+
+# Function to restart the script
+def restart_script():
+    python = sys.executable
+    os.execl(python, python, *sys.argv)
 
 def format_proxy(proxy_string, proxy_type):
     prefix = ''
@@ -115,7 +151,13 @@ async def send_ping(proxy_url, user_id, token):
     logger.info(proxy_url)
     browser_id = uuidv4()
     logger.info(browser_id)
-    scraper = cloudscraper.create_scraper()
+    scraper = cloudscraper.create_scraper(
+    browser={
+        'browser': 'chrome',
+        'platform': 'windows',
+        'desktop': True
+    }
+)
     while True:
         try:
             headers = {
@@ -147,6 +189,12 @@ async def send_ping(proxy_url, user_id, token):
 
 # Main function to run the program
 async def main():
+    # Check for updates before starting
+    if check_for_update():
+        logger.info("Restarting script to apply new version...")
+        restart_script()
+    
+    # Try up to 10 times to authenticate
     max_attempts = 10
     attempt = 0
     user_data = None
