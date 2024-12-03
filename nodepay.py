@@ -71,7 +71,13 @@ def format_proxy(proxy_string, proxy_type):
 
 async def call_api_info(token, proxy_url):
     logger.info("Getting UserID")
-    scraper = cloudscraper.create_scraper()
+    scraper = cloudscraper.create_scraper(
+    browser={
+        'browser': 'chrome',
+        'platform': 'windows',
+        'desktop': True
+    }
+)
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
         "Accept-Language": "en-US,en;q=0.9",
