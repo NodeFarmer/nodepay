@@ -37,10 +37,10 @@ proxy_type = read_single_line_file(os.path.join(script_dir, 'proxy-config.txt'))
 # Constants
 PING_URL = "https://nw.nodepay.org/api/network/ping"
 AUTH_URL = "http://api.nodepay.ai/api/auth/session"
-RETRY_INTERVAL = 60  # Retry interval for failed proxies in seconds
-EXTENSION_VERSION = "2.2.7"
+RETRY_INTERVAL = 55 * 60  # Retry interval for failed proxies in seconds
+EXTENSION_VERSION = "2.2.8"
 GITHUB_REPO = "NodeFarmer/nodepay"
-CURRENT_VERSION = "1.4.1"
+CURRENT_VERSION = "1.4.2"
 NODEPY_FILENAME = "nodepay.py"
 
 # Function to download the latest version of the script
