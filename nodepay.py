@@ -40,7 +40,7 @@ AUTH_URL = "https://api.nodepay.ai/api/auth/session"
 RETRY_INTERVAL = 55 * 60  # Retry interval for failed proxies in seconds
 EXTENSION_VERSION = "2.2.8"
 GITHUB_REPO = "NodeFarmer/nodepay"
-CURRENT_VERSION = "1.4.3"
+CURRENT_VERSION = "1.4.4"
 NODEPY_FILENAME = "nodepay.py"
 
 # Function to download the latest version of the script
@@ -161,16 +161,15 @@ async def send_ping(proxy_url, user_id, token):
     while True:
         try:
             headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
                 "Accept-Language": "en-US,en;q=0.9",
-                "Referer": "https://app.nodepay.ai/",
                 "Accept": "application/json, text/plain, */*",
                 "Content-Type": "application/json",
                 "Origin": "chrome-extension://lgmpfmgeabnnlemejacfljbmonaomfmm",
             }
             headers['Authorization'] = f'Bearer {token}'
             payload = {
-                "user_id": user_id,
+                "id": user_id,
                 "browser_id": browser_id,
                 "timestamp": int(time.time()),
                 "version": EXTENSION_VERSION
@@ -182,7 +181,7 @@ async def send_ping(proxy_url, user_id, token):
             response = scraper.post(PING_URL, headers=headers, json=payload, proxies=proxies)
             response.raise_for_status()
             logger.debug(response.json())
-            await asyncio.sleep(10)  # Wait for a while before the next action
+            await asyncio.sleep(RETRY_INTERVAL)  # Wait for a while before the next action
         except Exception as e:
             logger.error(e)
             await asyncio.sleep(RETRY_INTERVAL)
